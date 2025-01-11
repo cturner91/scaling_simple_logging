@@ -1,0 +1,4 @@
+Django==5.1.4
+psycopg==3.2.3
+celery==5.4.0
+SQLAlchemy==2.0.37  # for celery

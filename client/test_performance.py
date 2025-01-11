@@ -1,7 +1,7 @@
 import asyncio
 import aiohttp
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 from multiprocessing import cpu_count
 from time import sleep
@@ -10,12 +10,16 @@ from typing import Any, Callable
 import requests
 
 
-N_REQUESTS = 200  # Example number of requests
-BASE_URL = "http://localhost:8456"  # Replace with your actual base URL
-
-# URL = f'{BASE_URL}/api/simple/'
-# URL = f'{BASE_URL}/api/deferred/'
-URL = f'{BASE_URL}/api/batch/'
+N_REQUESTS = 100
+N_SECONDS = 1
+BASE_URL = "http://app:8456"
+URLS = [
+    f'{BASE_URL}/api/no-op/',
+    f'{BASE_URL}/api/low-op/',
+    f'{BASE_URL}/api/simple/',
+    f'{BASE_URL}/api/deferred/',
+    f'{BASE_URL}/api/in-memory-batch/',
+]
 
 
 def simple_parallel(
@@ -56,10 +60,11 @@ def simple_parallel(
 
 
 def submit(i: int, url: str) -> dict:
-    data = {'i': i}  # This lets us compare insertion order in DB with request send order
-    dt0 = datetime.now()
+    data = {'i': i+1}  # This lets us compare insertion order in DB with request send order
+    sleep(i / N_REQUESTS * N_SECONDS)
 
     retries = 0
+    dt0 = datetime.now()
     while retries < 5:
         try:
             response = requests.post(url, json=data)
@@ -68,10 +73,9 @@ def submit(i: int, url: str) -> dict:
         except:
             sleep(2**retries * 0.05)
             retries += 1
-
     dt1 = datetime.now()
-    delta = (dt1 - dt0).total_seconds()
 
+    delta = (dt1 - dt0).total_seconds()
     result = {
         'time_taken': delta,
         'i': i,
@@ -80,8 +84,17 @@ def submit(i: int, url: str) -> dict:
     return result
 
 
-if __name__ == '__main__':
-    tasks = {i: partial(submit, i=i, url=URL) for i in range(N_REQUESTS)}
+def run_batch(url, flush: bool = True) -> dict:
+    if flush:
+        # wipe DB to make it a fair test
+        flushed = False
+        while not flushed:
+            response = requests.get(f'{BASE_URL}/api/flush/')
+            if response.status_code == 200:
+                flushed = True
+
+    # submit N_REQUESTS tasks over N_SECONDS seconds        
+    tasks = {i: partial(submit, i=i, url=url) for i in range(N_REQUESTS)}
     results = simple_parallel(tasks)
 
     count_failed = 0
@@ -95,11 +108,30 @@ if __name__ == '__main__':
 
     mean_time = total_time / (N_REQUESTS - count_failed)
 
-    print(URL)
-    print('Count failed: ', count_failed)
-    print('Mean time: ', mean_time)
-    print('Total retries: ', total_retries)
+    results = {
+        'summary': {
+            'count_failed': count_failed,
+            'total_time': total_time,
+            'total_retries': total_retries,
+            'mean_time': mean_time,
+        },
+        'raw': results,
+    }
 
-    # print('\nData:')
-    # for result in results.values():
-    #     print(result)
+    return results
+
+
+if __name__ == '__main__':
+
+    for url in URLS:
+        results = run_batch(url, True)
+
+        print(url)
+        print('Count failed: ', results['summary']['count_failed'])
+        print('Mean time: ', results['summary']['mean_time'])
+        print('Total retries: ', results['summary']['total_retries'])
+        print(' ')
+
+        # print('\nData:')
+        # for result in results.values():
+        #     print(result)

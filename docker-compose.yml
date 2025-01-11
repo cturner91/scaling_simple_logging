@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: ./app/
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8456
+    # command: sleep 3600
+    volumes:
+      - ./app/:/app
+    ports:
+      - "8456:8456"
+    depends_on:
+      - db
+    environment:
+      - DJANGO_DB_NAME=postgres
+      - DJANGO_DB_USER=postgres
+      - DJANGO_DB_PASSWORD=postgres
+      - DJANGO_DB_HOST=db
+      - DJANGO_DB_PORT=5432
+
+  db:
+    image: postgres:15
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+  celery:
+    build:
+      context: ./app/
+      dockerfile: Dockerfile
+    command: celery -A scaling worker --loglevel=info
+    volumes:
+      - ./app/:/app
+    depends_on:
+      - db
+    environment:
+      - DJANGO_DB_NAME=postgres
+      - DJANGO_DB_USER=postgres
+      - DJANGO_DB_PASSWORD=postgres
+      - DJANGO_DB_HOST=db
+      - DJANGO_DB_PORT=5432
+
+  client:  # for running performance tests
+    build:
+      context: ./client/
+      dockerfile: Dockerfile
+    command: ./run.sh
+    # command: sleep 3600
+    volumes:
+      - ./client/:/app
+    depends_on:
+      - db
+      - app

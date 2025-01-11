@@ -17,13 +17,19 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-from api.views import get_count, create_log__simple, create_log__batch, create_log__deferred
+from api.views import get_count, create_log__simple, create_log__batch, create_log__deferred, flush_db, get_logs, no_op, low_op
 
 urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/count/', get_count),
+    path('api/get_logs/', get_logs),
+    path('api/flush/', flush_db),
+
+    path('api/no-op/', no_op),
+    path('api/low-op/', no_op),
+
     path('api/simple/', create_log__simple),
     path('api/deferred/', create_log__deferred),
-    path('api/batch/', create_log__batch),
+    path('api/in-memory-batch/', create_log__batch),
 ]
